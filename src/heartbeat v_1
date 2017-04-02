@@ -1,0 +1,31 @@
+
+#include <LiquidCrystal.h> 
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2); 
+  
+void setup(void)
+{
+   pinMode(A0,INPUT);
+   lcd.begin(16,2);
+   lcd.clear();
+   lcd.setCursor(0,0);
+   Serial.begin(9600);
+}
+
+void loop(void)
+{
+  
+   int heartbeat=analogRead(A0);
+   lcd.setCursor(0,0);
+   lcd.print(" Heart Monitor "); 
+   lcd.setCursor(0,1);
+   lcd.print("          ");
+   lcd.setCursor(0,1); 
+   lcd.print(heartbeat/10);
+   Serial.println(heartbeat/10);
+   delay(200);
+
+  
+}
+
+

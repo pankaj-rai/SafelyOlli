@@ -1,0 +1,207 @@
+* =================================================================================================
+       Project: Arduino Heart rate monitor
+        Author: Pankaj Rai
+       Created: 1st April 2017                
+=================================================================================================== */
+
+import processing.serial.*;                             // Import the serial library to allow Serial communication with the Arduino
+
+int numOfRecs = 45;                                     //   numOfRecs: The number of rectangles to display across the screen
+Rectangle[] myRecs = new Rectangle[numOfRecs];          //    myRecs[]: Is the array of Rectangles.  Rectangle is a custom class (programmed within this sketch)
+
+Serial myPort;                                         
+String comPortString="0";                              //comPortString: Is used to hold the string received from the Arduino
+float arduinoValue = 0;                                 //arduinoValue: Is the float variable converted from comPortString
+boolean beat = false;                                   //        beat: Used to control for multiple high/low signals coming from the Arduino
+
+int totalTime = 0;                                      //   totalTime: Is the variable used to identify the total time between beats
+int lastTime = 0;                                       //    lastTime: Is the variable used to remember when the last beat took place
+int beatCounter = 0;                                    // beatCounter: Is used to keep track of the number of beats (in order to calculate the average BPM)
+int totalBeats = 10;                                    //  totalBeats: Tells the computer that we want to calculate the average BPM using 10 beats.
+int[] BPM = new int[totalBeats];                        //       BPM[]: Is the Beat Per Minute (BPM) array - to hold 10 BPM calculations
+int sumBPM = 0;                                         //      sumBPM: Is used to sum the BPM[] array values, and is then used to calculate the average BPM.
+int avgBPM = 0;                                         //      avgBPM: Is the variable used to hold the average BPM calculated value.
+
+PFont f, f2;                                            //     f & f2 : Are font related variables. Used to store font properties. 
+
+
+//==SETUP==============================================================================================
+void setup(){
+  size(displayWidth,displayHeight);                     // Set the size of the display to match the monitor width and height
+  smooth();                                             // Draw all shapes with smooth edges.
+  f = createFont("Arial",24);                           // Initialise the "f" font variable    - used for the "calibrating" text displayed at the beginning
+  f2 = createFont("Arial",96);                          // Initialise the "f2" font variable   - used for the avgBPM display on screen
+  
+  for(int i=0; i<numOfRecs; i++){                       // Initialise the array of rectangles
+    myRecs[i] = new Rectangle(i, numOfRecs);
+  }
+  
+  for(int i=0; i<totalBeats; i++){                      // Initialise the BPM array
+    BPM[i] = 0;
+  }
+  
+  myPort = new Serial(this, Serial.list()[0], 9600);    // Start Serial communication with the Arduino using a baud rate of 9600
+  myPort.bufferUntil('\n');                             // Trigger a SerialEvent on new line
+}
+
+
+//==DRAW==============================================================================================
+void draw(){
+  background(0);                                        // Set the background to BLACK (this clears the screen each time)
+  drawRecs();                                           // Method call to draw the rectangles on the screen
+  drawBPM();                                            // Method call to draw the avgBPM value to the top right of the screen
+}
+
+
+//==drawRecs==========================================================================================
+void drawRecs(){                                        // This custom method will draw the rectangles on the screen                                
+  myRecs[0].setSize(arduinoValue);                      // Set the first rectangle to match arduinoValue; any positive value will start the animation.
+  for(int i=numOfRecs-1; i>0; i--){                     // The loop counts backwards for coding efficiency - and is used to draw all of the rectangles to screen
+    myRecs[i].setMult(i);                               // setMulti creates the specific curve pattern. 
+    myRecs[i].setRed(avgBPM);                           // The rectangles become more "Red" with higher avgBPM values
+    myRecs[i].setSize(myRecs[i-1].getH());              // The current rectangle size is determined by the height of the rectangle immediately to it's left
+    fill(myRecs[i].getR(),myRecs[i].getG(), myRecs[i].getB());                     // Set the colour of this rectangle
+    rect(myRecs[i].getX(), myRecs[i].getY(), myRecs[i].getW(), myRecs[i].getH());  // Draw this rectangle
+  }
+}
+
+
+//==drawBPM===========================================================================================
+void drawBPM(){                                         // This custom method is used to calculate the avgBPM and draw it to screen.
+  sumBPM = 0;                                           // Reset the sumBPM variable
+  avgBPM = 0;                                           // Reset the avgBPM variable
+  boolean calibrating = false;                          // calibrating: this boolean variable is used to control when the avgBPM is displayed to screen
+  
+  for(int i=1; i<totalBeats; i++){
+    sumBPM = sumBPM + BPM[i-1];                         // Sum all of the BPM values in the BPM array.
+    if(BPM[i-1]<1){                                     // If any BPM values are equal to 0, then set the calibrating variable to true. 
+      calibrating = true;                               // This will be used later to display "calibrating" on the screen.
+    }
+  }
+  avgBPM = sumBPM/(totalBeats-1);                       // Calculate the average BPM from all BPM values
+                                                        
+  fill(255);                                            // The text will be displayed as WHITE text
+  if(calibrating){
+    textFont(f);
+    text("Calibrating", (4*width)/5, (height/5));      // If the calibrating variable is TRUE, then display the word "Calibrating" on screen
+    fill(0);                                           // Change the fill and stroke to black (0) so that other text is "hidden" while calibrating variable is TRUE
+    stroke(0);
+  } else {
+    textFont(f2);
+    text(avgBPM, (4*width)/5, (height/5));             // If the calibrating variable is FALSE, then display the avgBPM variable on screen
+    stroke(255);                                       // Change the stroke to white (255) to show the white line underlying the word BPM.
+  }
+  
+   textFont(f);
+   text("BPM", (82*width)/100, (height/11));           // This will display the underlined word "BPM" when calibrating variable is FALSE.
+   line((80*width)/100, (height/10),(88*width)/100, (height/10));
+   stroke(0);
+}
+
+
+//==serialEvent===========================================================================================
+void serialEvent(Serial cPort){                        // This will be triggered every time a "new line" of data is received from the Arduino
+ comPortString = cPort.readStringUntil('\n');          // Read this data into the comPortString variable.
+ if(comPortString != null) {                           // If the comPortString variable is not NULL then
+   comPortString=trim(comPortString);                  // trim any white space around the text.
+   int i = int(map(Integer.parseInt(comPortString),1,1023,1,height));  // convert the string to an integer, and map the value so that the rectangle will fit within the screen.
+   arduinoValue = float(i);                            // Convert the integer into a float value.
+   if (!beat){
+     if(arduinoValue>0){                               // When a beat is detected, the "trigger" method is called.
+       trigger(millis());                              // millis() creates a timeStamp of when the beat occured.
+       beat=true;                                      // The beat variable is changed to TRUE to register that a beat has been detected.
+     }
+   }
+   if (arduinoValue<1){                                // When the Arduino value returns back to zero, we will need to change the beat status to FALSE.
+     beat = false;
+   }
+ }
+} 
+
+
+//==trigger===========================================================================================
+void trigger(int time){                                // This method is used to calculate the Beats per Minute (BPM) and to store the last 10 BPMs into the BPM[] array.
+  totalTime = time - lastTime;                         // totalTime = the current beat time minus the last time there was a beat.
+  lastTime = time;                                     // Set the lastTime variable to the current "time" for the next round of calculations.
+  BPM[beatCounter] = 60000/totalTime;                  // Calculate BPM from the totalTime. 60000 = 1 minute.
+  beatCounter++;                                       // Increment the beatCounter 
+  if (beatCounter>totalBeats-1){                       // Reset the beatCounter when the total number of BPMs have been stored into the BPM[] array.
+    beatCounter=0;                                     // This allows us to keep the last 10 BPM calculations at all times.
+  }
+}
+
+
+//==sketchFullScreen==========================================================================================
+boolean sketchFullScreen() {                           // This puts Processing into Full Screen Mode
+ return true;
+}
+
+
+//==Rectangle CLASS==================================================================================*********
+class Rectangle{
+  float xPos, defaultY, yPos, myWidth, myHeight, myMultiplier;    // Variables used for drawing rectangles
+  int blueVal, greenVal, redVal;                                  // Variables used for the rectangle colour
+  
+  Rectangle(int recNum, int nRecs){                               // The rectangles are constructed using two variables. The total number of rectangles to be displayed, and the identification of this rectangle (recNum)
+    myWidth = displayWidth/nRecs;                                 // The width of the rectangle is determined by the screen width and the total number of rectangles.
+    xPos = recNum * myWidth;                                      // The x Position of this rectangle is determined by the width of the rectangles (all same) and the rectangle identifier.
+    defaultY=displayHeight/2;                                     // The default Y position of the rectangle is half way down the screen.
+    yPos = defaultY;                                              // yPos is used to adjust the position of the rectangle as the size changes.
+    myHeight = 1;                                                 // The height of the rectangle starts at 1 pixel
+    myMultiplier = 1;                                             // The myMultiplier variable will be used to create the funnel shaped path for the rectangles.
+    redVal = 0;                                                   // The red Value starts off being 0 - but changes with avgBPM. Higher avgBPM means higher redVal
+    
+    if (recNum>0){                                                // The blue Value progressively increases with every rectangle (moving to the right of the screen)
+      blueVal = (recNum*255)/nRecs;
+    } else {
+      blueVal = 0;
+    }
+    greenVal = 255-blueVal;                                       // Initially, the green value is at the opposite end of the spectrum to the blue value.
+  }
+  
+  void setSize(float newSize){                                    // This is used to set the new size of each rectangle 
+    myHeight=newSize*myMultiplier;
+    yPos=defaultY-(newSize/2);
+  }
+  
+  void setMult(int i){                                            // The multiplier is a function of COS, which means that it varies from 1 to 0.
+    myMultiplier = cos(radians(i));                               // You can try other functions to experience different effects.
+  }
+  
+  void setRed(int r){
+    redVal = int(constrain(map(float(r), 60, 100, 0, 255),0,255)); // setRed is used to change the redValue based on the "normal" value for resting BPM (60-100). 
+    greenVal = 255 - redVal;                                       // When the avgBPM > 100, redVal will equal 255, and the greenVal will equal 0.
+  }                                                                // When the avgBPM < 60, redVal will equal 0, and greenVal will equal 255.
+  
+  float  getX(){                                                   // get the x Position of the rectangle
+    return xPos;
+  }
+ 
+  float getY(){                                                    // get the y Position of the rectangle
+    return yPos;
+  }
+  
+  float getW(){                                                    // get the width of the rectangle
+    return myWidth;
+  }
+  
+  float getH(){                                                    // get the height of the rectangle
+    return myHeight;
+  }
+  
+  float getM(){                                                    // get the Multiplier of the rectangle
+    return myMultiplier;
+  }
+  
+  int getB(){                                                      // get the "blue" component of the rectangle colour
+    return blueVal;
+  }
+  
+  int getR(){                                                      // get the "red" component of the rectangle colour
+    return redVal;
+  }
+  
+  int getG(){                                                      // get the "green" component of the rectangle colour
+    return greenVal;
+  }
+}
